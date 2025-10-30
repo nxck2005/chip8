@@ -311,59 +311,122 @@ pub fn cycle(self: *Self) void {
         0xE => {
             // key based skip
             // skip if key with the value of vx is skipped
-            const x = (self.current_opcode & 0x0F00) >> 8;
-            const m = self.current_opcode & 0x00FF;
+            const x = (self.opcode & 0x0F00) >> 8;
+            const m = self.opcode & 0x00FF;
 
             if (m == 0x9E) {
                 if (self.keys[self.registers[x]] == 1) {
-                    self.increment_pc();
+                    self.incPc();
                 }
             } else if (m == 0xA1) {
                 if (self.keys[self.registers[x]] != 1) {
-                    self.increment_pc();
+                    self.incPc();
                 }
             }
-            self.increment_pc();
+            self.incPc();
         },
 
         // Misc instructions
+        // commented by gemini
         0xF => {
-            const x = (self.current_opcode & 0x0F00) >> 8;
-            const m = self.current_opcode & 0x00FF;
+            // Get the register index 'x' from the opcode (0xFX00)
+            const x = (self.opcode & 0x0F00) >> 8;
 
+            // Get the specific instruction 'm' from the last byte (0x00FF)
+            const m = self.opcode & 0x00FF;
+
+            // --- FX07: LD Vx, DT ---
+            // Loads the current value of the delay timer into register Vx.
             if (m == 0x07) {
                 self.registers[x] = self.delay_timer;
+
+                // --- FX0A: LD Vx, K ---
+                // Wait for a key press and store the value of the key in register Vx.
+                // This is a *blocking* operation.
             } else if (m == 0x0A) {
                 var key_pressed = false;
 
+                // Loop through all 16 keys
                 var i: usize = 0;
                 while (i < 16) : (i += 1) {
+                    // If a key is currently pressed...
                     if (self.keys[i] != 0) {
+                        // ...store its index (0-15) in Vx
                         self.registers[x] = @truncate(i);
                         key_pressed = true;
+                        // Note: We don't break here, so if multiple keys are
+                        // pressed, the highest-index key will be stored.
                     }
                 }
 
-                if (!key_pressed)
+                // If no key was pressed, we *must stop* executing
+                // instructions until one is.
+                if (!key_pressed) {
+                    // By returning here, we *skip* `self.incPc()`.
+                    // This means the program counter (PC) does not advance,
+                    // and this *same instruction (FX0A)* will be executed
+                    // again on the next cycle. This effectively "halts"
+                    // the CPU until a key is pressed.
                     return;
+                }
+
+                // --- FX15: LD DT, Vx ---
+                // Loads the value from register Vx into the delay timer.
             } else if (m == 0x15) {
                 self.delay_timer = self.registers[x];
+
+                // --- FX18: LD ST, Vx ---
+                // Loads the value from register Vx into the sound timer.
             } else if (m == 0x18) {
                 self.sound_timer = self.registers[x];
+
+                // --- FX1E: ADD I, Vx ---
+                // Adds the value of register Vx to the index register I.
             } else if (m == 0x1E) {
+                // This instruction has a special quirk:
+                // VF (register 0xF) is set to 1 if I + Vx > 0xFFF (overflows
+                // the 12-bit address space), and 0 otherwise.
                 self.registers[0xF] = if (self.index + self.registers[x] > 0xFFF) 1 else 0;
                 self.index += self.registers[x];
+
+                // --- FX29: LD F, Vx ---
+                // Sets the index register I to the memory location of the sprite
+                // for the digit stored in register Vx.
             } else if (m == 0x29) {
+                // The font sprites are 5 bytes each (as seen in chip8_fontset).
+                // We assume the fontset starts at memory address 0x0.
+                // Digit 0 -> I = 0 * 5 = 0x0
+                // Digit 1 -> I = 1 * 5 = 0x5
+                // ...
+                // Digit F -> I = 15 * 5 = 0x4B
                 self.index = self.registers[x] * 0x5;
+
+                // --- FX33: LD B, Vx ---
+                // Stores the Binary-Coded Decimal (BCD) representation of
+                // the value in register Vx at memory locations I, I+1, and I+2.
             } else if (m == 0x33) {
+                // Example: If Vx = 123
+                // self.memory[I]   = 123 / 100         = 1
                 self.memory[self.index] = self.registers[x] / 100;
+
+                // self.memory[I+1] = (123 / 10) % 10   = 12 % 10 = 2
                 self.memory[self.index + 1] = (self.registers[x] / 10) % 10;
+
+                // self.memory[I+2] = 123 % 10          = 3
                 self.memory[self.index + 2] = self.registers[x] % 10;
+
+                // --- FX55: LD [I], Vx ---
+                // Stores registers V0 through Vx (inclusive) in memory
+                // starting at memory location I.
             } else if (m == 0x55) {
                 var i: usize = 0;
                 while (i <= x) : (i += 1) {
                     self.memory[self.index + i] = self.registers[i];
                 }
+
+                // --- FX65: LD Vx, [I] ---
+                // Loads registers V0 through Vx (inclusive) with values
+                // from memory starting at memory location I.
             } else if (m == 0x65) {
                 var i: usize = 0;
                 while (i <= x) : (i += 1) {
@@ -371,7 +434,9 @@ pub fn cycle(self: *Self) void {
                 }
             }
 
-            self.increment_pc();
+            // All instructions in the 0xF block (except the waiting FX0A)
+            // finish by incrementing the PC to the next instruction.
+            self.incPc();
         },
 
         else => {},
