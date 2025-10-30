@@ -4,11 +4,13 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const sdl_dep = b.dependency("sdl", .{
+    const raylib_dep = b.dependency("raylib_zig", .{
         .target = target,
         .optimize = optimize,
     });
-    const sdl_lib = sdl_dep.artifact("SDL3");
+    const raylib = raylib_dep.module("raylib");
+    const raygui = raylib_dep.module("raygui");
+    const raylib_artifact = raylib_dep.artifact("raylib");
 
     const mod = b.addModule("chip8", .{
         .root_source_file = b.path("src/root.zig"),
@@ -23,11 +25,13 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
             .imports = &.{
                 .{ .name = "chip8", .module = mod },
+                .{ .name = "raylib", .module = raylib },
+                .{ .name = "raygui", .module = raygui },
             },
         }),
     });
 
-    exe.linkLibrary(sdl_lib);
+    exe.linkLibrary(raylib_artifact);
     b.installArtifact(exe);
 
     const run_step = b.step("run", "Run the app");
