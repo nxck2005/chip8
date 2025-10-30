@@ -235,6 +235,43 @@ pub fn cycle(self: *Self) void {
             self.incPc();
         },
 
+        // DRAW INSTRUCTION
+        0xD => {
+            // set flag to 0, as per reference to start with.
+            self.registers[0xF] = 0;
+
+            const xidx = (self.opcode & 0x0F00) >> 8;
+            const yidx = (self.opcode & 0x00F0) >> 4;
+            const offset = self.opcode & 0x000F;
+
+            const regx = self.registers[xidx];
+            const regy = self.registers[yidx];
+
+            var y: usize = 0;
+            while (y < offset) : (y += 1) {
+                const spr = self.memory[self.index + y];
+
+                var x: usize = 0;
+                while (x < 8) : (x += 1) {
+                    const v: u8 = 0x80;
+                    if ((spr & (v >> @intCast(x))) != 0) {
+                        const tX = (regx + x) % 64;
+                        const tY = (regy + y) % 32;
+
+                        const idx = tX + tY * 64;
+
+                        self.graphics[idx] ^= 1;
+
+                        if (self.graphics[idx] == 0) {
+                            self.registers[0x0F] = 1;
+                        }
+                    }
+                }
+            }
+
+            self.incPc();
+        },
+
         else => {},
     }
 }
