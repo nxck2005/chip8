@@ -143,10 +143,20 @@ pub fn cycle(self: *Self) void {
             // skip next instructio if Vx == Vy
             var vx = (self.opcode & 0x0F00) >> 8;
             var vy = (self.opcode & 0x00F0) >> 4;
-            if (self.registers[vx] != self.registers[vy]) {
+            if (self.registers[vx] == self.registers[vy]) {
                 self.incPc();
             }
             self.incPc();
         },
+
+        0x9 => {
+            // skip next instructio if Vx != Vy
+            var vx = (self.opcode & 0x0F00) >> 8;
+            var vy = (self.opcode & 0x00F0) >> 4;
+            if (self.registers[vx] != self.registers[vy]) {
+                self.incPc();
+            }
+            self.incPc(); 
+        }
     }
 }
