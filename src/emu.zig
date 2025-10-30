@@ -54,19 +54,19 @@ pub fn init(self: *Self) void {
     self.soundTimer = 0;
 
     // zero out bitfields
-    for (self.graphics) |*x| {
+    for (&self.graphics) |*x| {
         x.* = 0;
     }
-    for (self.memory) |*x| {
+    for (&self.memory) |*x| {
         x.* = 0;
     }
-    for (self.stack) |*x| {
+    for (&self.stack) |*x| {
         x.* = 0;
     }
-    for (self.registers) |*x| {
+    for (&self.registers) |*x| {
         x.* = 0;
     }
-    for (self.keys) |*x| {
+    for (&self.keys) |*x| {
         x.* = 0;
     }
     // load fontset from 0x0 to 0x4F
@@ -82,6 +82,7 @@ fn incPc(self: *Self) void {
 }
 
 pub fn cycle(self: *Self) void {
+    if (self.pc > 0xFFF) @panic("PANIC: illegal program counter");
     // we address 1 byte at a time. opcode is stored as two seperate bytes contiguously.
     // shift first byte (higher), slot into the higher word, and add the lower byte
     self.opcode = @as(u16, @intCast(self.memory[self.pc])) << 8 | self.memory[self.pc + 1];
@@ -338,7 +339,7 @@ pub fn cycle(self: *Self) void {
             // --- FX07: LD Vx, DT ---
             // Loads the current value of the delay timer into register Vx.
             if (m == 0x07) {
-                self.registers[x] = self.delay_timer;
+                self.registers[x] = self.delayTimer;
 
                 // --- FX0A: LD Vx, K ---
                 // Wait for a key press and store the value of the key in register Vx.
@@ -373,12 +374,12 @@ pub fn cycle(self: *Self) void {
                 // --- FX15: LD DT, Vx ---
                 // Loads the value from register Vx into the delay timer.
             } else if (m == 0x15) {
-                self.delay_timer = self.registers[x];
+                self.delayTimer = self.registers[x];
 
                 // --- FX18: LD ST, Vx ---
                 // Loads the value from register Vx into the sound timer.
             } else if (m == 0x18) {
-                self.sound_timer = self.registers[x];
+                self.soundTimer = self.registers[x];
 
                 // --- FX1E: ADD I, Vx ---
                 // Adds the value of register Vx to the index register I.
@@ -441,11 +442,11 @@ pub fn cycle(self: *Self) void {
 
         else => {},
     }
-    if (self.delay_timer > 0)
-        self.delay_timer -= 1;
+    if (self.delayTimer > 0)
+        self.delayTimer -= 1;
 
-    if (self.sound_timer > 0) {
-        self.sound_timer -= 1;
+    if (self.soundTimer > 0) {
+        self.soundTimer -= 1;
     }
 }
 
