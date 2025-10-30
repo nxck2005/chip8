@@ -1,8 +1,10 @@
 const std = @import("std");
 const cstd = @cImport(@cInclude("stdlib.h"));
 const time = @cImport(@cInclude("time.h"));
+const c = @import("std").c;
 
 // from hardware reference: http://devernay.free.fr/hacks/chip8/C8TECH10.HTM
+
 opcode: u16,
 memory: [4096]u8,
 graphics: [64 * 32]u8,
@@ -17,7 +19,8 @@ keys: [16]u8,
 
 // CHIP-8 sprite fontset. lives in interpreter memspace
 // shamelessly copied from https://multigesture.net/articles/how-to-write-an-emulator-chip-8-interpreter/
-const chip8_fontset = [80]u8{
+
+const chip8_fontset = [_]u8{
     0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
     0x20, 0x60, 0x20, 0x20, 0x70, // 1
     0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2
@@ -46,7 +49,7 @@ pub fn init(self: *Self) void {
     self.pc = 0x200;
     self.opcode = 0;
     self.index = 0;
-    self.sp - 0;
+    self.sp = 0;
     self.delayTimer = 0;
     self.soundTimer = 0;
 
@@ -66,10 +69,9 @@ pub fn init(self: *Self) void {
     for (self.keys) |*x| {
         x.* = 0;
     }
-
     // load fontset from 0x0 to 0x4F
-    for (chip8_fontset) |c, idx| {
-        self.memory[idx] = c;
+    for (chip8_fontset, 0..) |spr, idx| {
+        self.memory[idx] = spr;
     }
 }
 
@@ -82,22 +84,20 @@ fn incPc(self: *Self) void {
 pub fn cycle(self: *Self) void {
     // we address 1 byte at a time. opcode is stored as two seperate bytes contiguously.
     // shift first byte (higher), slot into the higher word, and add the lower byte
-    self.opcode = self.memory[self.pc] << 8 | self.memory[self.pc + 1];
+    self.opcode = @as(u16, @intCast(self.memory[self.pc])) << 8 | self.memory[self.pc + 1];
 
     // first significant nibble
     // THIS 0000 0000 0000
-    var msn = self.opcode >> 12;
-
-    switch(msn) {
+    const msn = self.opcode >> 12;
+    switch (msn) {
         0x0 => {
             if (self.opcode == 0x00E0) {
                 // clrscr
-                for (self.graphics) |*gval| {
-                    gval.* = 0;
+                for (&self.graphics) |*g| {
+                    g.* = 0;
                 }
             } else if (self.opcode == 0x00EE) {
                 // ret instruction
-                // opposite of call, given below
                 self.sp -= 1;
                 self.pc = self.stack[self.sp];
             }
@@ -113,18 +113,14 @@ pub fn cycle(self: *Self) void {
         0x2 => {
             // save return address on current top of stack
             self.stack[self.sp] = self.pc;
-
-            // increment top
             self.sp += 1;
-
-            // set pc to new address (last 3 nibbles)
             self.pc = self.opcode & 0x0FFF;
         },
 
         0x3 => {
             // skip next instruction if Vx = kk
-            var regno = (self.opcode & 0x0F00) >> 8;
-            if (self.registers[regno] == (self.opcode & 0x00FF)) {
+            const x = (self.opcode & 0x0F00) >> 8;
+            if (self.registers[x] == self.opcode & 0x00FF) {
                 self.incPc();
             }
             self.incPc();
@@ -132,8 +128,8 @@ pub fn cycle(self: *Self) void {
 
         0x4 => {
             // skip next instruction if Vx != kk
-            var regno = (self.opcode & 0x0F00) >> 8;
-            if (self.registers[regno] != (self.opcode & 0x00FF)) {
+            const x = (self.opcode & 0x0F00) >> 8;
+            if (self.registers[x] != self.opcode & 0x00FF) {
                 self.incPc();
             }
             self.incPc();
@@ -141,8 +137,8 @@ pub fn cycle(self: *Self) void {
 
         0x5 => {
             // skip next instruction if Vx == Vy
-            var vx = (self.opcode & 0x0F00) >> 8;
-            var vy = (self.opcode & 0x00F0) >> 4;
+            const vx = (self.opcode & 0x0F00) >> 8;
+            const vy = (self.opcode & 0x00F0) >> 4;
             if (self.registers[vx] == self.registers[vy]) {
                 self.incPc();
             }
@@ -151,18 +147,98 @@ pub fn cycle(self: *Self) void {
 
         0x9 => {
             // skip next instruction if Vx != Vy
-            var vx = (self.opcode & 0x0F00) >> 8;
-            var vy = (self.opcode & 0x00F0) >> 4;
+            const vx = (self.opcode & 0x0F00) >> 8;
+            const vy = (self.opcode & 0x00F0) >> 4;
             if (self.registers[vx] != self.registers[vy]) {
                 self.incPc();
             }
-            self.incPc(); 
+            self.incPc();
         },
 
         0x6 => {
             // load a byte
-            var regno = (self.opcode & 0x0F00) >> 8;
-            self.registers[regno] = @truncate(u8, self.opcode & 0x00FF);
-        }
+            const x = (self.opcode & 0x0F00) >> 8;
+            self.registers[x] = @truncate(self.opcode & 0x00FF);
+            self.incPc();
+        },
+
+        0x7 => {
+            // add instruction
+            @setRuntimeSafety(false);
+            const x = (self.opcode & 0x0F00) >> 8;
+            self.registers[x] += @truncate(self.opcode & 0x00FF);
+            self.incPc();
+        },
+
+        // ALU INSTRUCTIONS
+
+        0x8 => {
+            const x = (self.opcode & 0x0F00) >> 8;
+            const y = (self.opcode & 0x00F0) >> 4;
+            const mode = self.opcode & 0x000F;
+
+            switch (mode) {
+                0 => self.registers[x] = self.registers[y],
+                1 => self.registers[x] |= self.registers[y],
+                2 => self.registers[x] &= self.registers[y],
+                3 => self.registers[x] ^= self.registers[y],
+                4 => {
+                    var sum: u16 = self.registers[x];
+                    sum += self.registers[y];
+
+                    self.registers[0xF] = if (sum > 255) 1 else 0;
+                    self.registers[x] = @truncate(sum & 0x00FF);
+                },
+                5 => {
+                    @setRuntimeSafety(false);
+                    self.registers[0xF] = if (self.registers[x] > self.registers[y]) 1 else 0;
+                    self.registers[x] -= self.registers[y];
+                },
+                6 => {
+                    self.registers[0xF] = self.registers[x] & 0b00000001;
+                    self.registers[x] >>= 1;
+                },
+                7 => {
+                    @setRuntimeSafety(false);
+                    self.registers[0xF] = if (self.registers[y] > self.registers[x]) 1 else 0;
+                    self.registers[x] = self.registers[y] - self.registers[x];
+                },
+                14 => {
+                    self.registers[0xF] = if (self.registers[x] & 0b10000000 != 0) 1 else 0;
+                    self.registers[x] <<= 1;
+                },
+                else => {},
+            }
+
+            self.incPc();
+        },
+
+        0xA => {
+
+            // load address
+            self.index = self.opcode & 0x0FFF;
+            self.incPc();
+        },
+
+        0xB => {
+
+            // jump to loc nnn + reg0
+            self.pc = (self.opcode & 0x0FFF) + @as(u16, @intCast(self.registers[0]));
+        },
+
+        0xC => {
+            const x = (self.opcode & 0x0F00) >> 8;
+            const kk = self.opcode & 0x00FF;
+            const rand_gen = std.Random.DefaultPrng;
+            var rand = rand_gen.init(33);
+            self.registers[x] = @mod(rand.random().int(u8), 255) & @as(u8, @truncate(kk));
+            self.incPc();
+        },
+
+        else => {},
     }
+}
+
+pub fn main() !void {
+    std.debug.print("pass\n", .{});
 }
