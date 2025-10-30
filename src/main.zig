@@ -76,8 +76,8 @@ pub fn main() !void {
         }
     }
 
-    const screenWidth = 640;
-    const screenHeight = 320;
+    const screenWidth = 1280;
+    const screenHeight = 640;
 
     rl.initWindow(screenWidth, screenHeight, "CHIP-8 Emulator");
     defer rl.closeWindow();
