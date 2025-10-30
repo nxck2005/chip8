@@ -13,6 +13,40 @@ pub fn main() !void {
     cpu = try allocator.create(CHIP8);
     cpu.init();
 
+    const args = try std.process.argsAlloc(allocator);
+    defer std.process.argsFree(allocator, args);
+
+    const arglen = args.len;
+    if (arglen != 2) {
+        std.debug.print("PANIC: ROM load failed; no ROM given\n", .{});
+        return;
+    }
+
+    const romfile = args[1];
+    const rom = try std.fs.cwd().openFile(romfile, .{});
+    defer rom.close();
+
+    const size = try rom.getEndPos();
+
+    var read_buf: [2]u8 = undefined;
+    var fr = rom.reader(&read_buf);
+    const reader = &fr.interface;
+
+    var i: usize = 0;
+    while (i < size) : (i += 1) {
+        const readbyte = reader.takeByte();
+        if (readbyte) |byte| {
+            cpu.memory[i + 0x200] = byte;
+        } else |err| {
+            if (err == error.EndOfStream) {
+                std.debug.print("PANIC: seek error while reading\n", .{});
+                return;
+            } else {
+                return;
+            }
+        }
+    }
+
     const screenWidth = 640;
     const screenHeight = 320;
 
@@ -21,11 +55,33 @@ pub fn main() !void {
 
     rl.setTargetFPS(60);
 
+    // cpu buffer to prep raylib pixel colors
+    var pxbuffer: [64 * 32]rl.Color = .{rl.Color.black} ** (64 * 32);
+
+    // gpu texture draw
+    const img = rl.genImageColor(64, 32, rl.Color.black);
+    const texture = try rl.loadTextureFromImage(img);
+    rl.unloadImage(img); // done with the cpu img
+    defer rl.unloadTexture(texture);
+
     while (!rl.windowShouldClose()) {
         cpu.cycle();
+        std.debug.print("{d}\n", .{cpu.pc});
+        if (cpu.rdraw) {
+            for (0..pxbuffer.len) |idx| {
+                if (cpu.graphics[idx] == 1) {
+                    pxbuffer[idx] = rl.Color.white;
+                } else {
+                    pxbuffer[idx] = rl.Color.black;
+                }
+            }
+        }
+        rl.updateTexture(texture, pxbuffer[0..]);
+        cpu.rdraw = false;
         rl.beginDrawing();
 
         rl.clearBackground(rl.Color.black);
+        rl.drawTexturePro(texture, rl.Rectangle{ .x = 0, .y = 0, .width = 64, .height = 32 }, rl.Rectangle{ .x = 0, .y = 0, .width = screenWidth, .height = screenHeight }, rl.Vector2{ .x = 0, .y = 0 }, 0.0, rl.Color.white);
 
         rl.drawFPS(10, 10);
 

@@ -17,6 +17,9 @@ stack: [16]u16,
 sp: u16,
 keys: [16]u8,
 
+// for raylib to know when to draw
+rdraw: bool,
+
 // CHIP-8 sprite fontset. lives in interpreter memspace
 // shamelessly copied from https://multigesture.net/articles/how-to-write-an-emulator-chip-8-interpreter/
 // the length turns out to be the height.
@@ -52,6 +55,7 @@ pub fn init(self: *Self) void {
     self.sp = 0;
     self.delayTimer = 0;
     self.soundTimer = 0;
+    self.rdraw = true;
 
     // zero out bitfields
     for (&self.graphics) |*x| {
@@ -305,6 +309,7 @@ pub fn cycle(self: *Self) void {
                     }
                 }
             }
+            self.rdraw = true;
             // 12. Done drawing, move to the next instruction.
             self.incPc();
         },
