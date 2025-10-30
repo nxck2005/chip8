@@ -1,10 +1,10 @@
-# CHIP-8 Emulator
+# CHIP-8
 
 ![Zig Version](https://img.shields.io/badge/zig-0.15.1+-orange.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)
 
-A simple CHIP-8 emulator written in Zig, using Raylib for graphics.
+A simple CHIP-8 emulator/interpreter written in Zig, using Raylib for graphics.
 
 ![CHIP-8 Emulator Demo](demo/img1.gif)
 
