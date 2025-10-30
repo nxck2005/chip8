@@ -19,7 +19,7 @@ keys: [16]u8,
 
 // CHIP-8 sprite fontset. lives in interpreter memspace
 // shamelessly copied from https://multigesture.net/articles/how-to-write-an-emulator-chip-8-interpreter/
-
+// the length turns out to be the height.
 const chip8_fontset = [_]u8{
     0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
     0x20, 0x60, 0x20, 0x20, 0x70, // 1
@@ -236,43 +236,151 @@ pub fn cycle(self: *Self) void {
         },
 
         // DRAW INSTRUCTION
+        // each row of 8 pixels read as byte from memory
+        // shoutout gemini for commenting
         0xD => {
-            // set flag to 0, as per reference to start with.
+            // 1. We assume no collision happened, so we set the flag to 0.
             self.registers[0xF] = 0;
 
-            const xidx = (self.opcode & 0x0F00) >> 8;
-            const yidx = (self.opcode & 0x00F0) >> 4;
-            const offset = self.opcode & 0x000F;
+            // 2. Get the parameters from the opcode
+            const xidx = (self.opcode & 0x0F00) >> 8; // Register index for X coord
+            const yidx = (self.opcode & 0x00F0) >> 4; // Register index for Y coord
+            const offset = self.opcode & 0x000F; // The height (n) of the sprite
 
-            const regx = self.registers[xidx];
-            const regy = self.registers[yidx];
+            // 3. Get the actual X and Y coordinates
+            const regx = self.registers[xidx]; // e.g., 20
+            const regy = self.registers[yidx]; // e.g., 10
 
+            // 4. This is the OUTER loop. It loops "n" (offset) times.
+            //    It processes ONE ROW of the sprite per loop.
             var y: usize = 0;
             while (y < offset) : (y += 1) {
+
+                // 5. Get the 8-bit sprite data for the current row.
+                //    y=0: get memory[I + 0]  (e.g., 0xF0)
+                //    y=1: get memory[I + 1]  (e.g., 0x90)
                 const spr = self.memory[self.index + y];
 
+                // 6. This is the INNER loop. It loops 8 times (once for each bit/pixel
+                //    in the "spr" byte).
                 var x: usize = 0;
                 while (x < 8) : (x += 1) {
+
+                    // 7. This is the "magic line" to check a single bit.
+                    //    (0x80 >> x) slides a "1" bit across:
+                    //    x=0: checks (spr & 10000000)
+                    //    x=1: checks (spr & 01000000)
+                    //    ...etc.
+                    //    If the result is "!= 0", that bit was a 1!
                     const v: u8 = 0x80;
                     if ((spr & (v >> @intCast(x))) != 0) {
-                        const tX = (regx + x) % 64;
-                        const tY = (regy + y) % 32;
 
+                        // 8. This bit is a 1, so we need to draw a pixel.
+                        //    First, calculate the final screen coordinates,
+                        //    wrapping around if we go off-screen.
+                        const tX = (regx + x) % 64; // Wrap X
+                        const tY = (regy + y) % 32; // Wrap Y
+
+                        // 9. Convert the 2D (tX, tY) coordinate to a 1D index
+                        //    in your self.graphics array.
                         const idx = tX + tY * 64;
 
-                        self.graphics[idx] ^= 1;
-
-                        if (self.graphics[idx] == 0) {
-                            self.registers[0x0F] = 1;
+                        // 10. This is the collision check!
+                        //     We are about to draw a pixel (self.graphics[idx] ^= 1).
+                        //     If the pixel at self.graphics[idx] is ALREADY 1,
+                        //     our XOR will flip it to 0, which means we had a collision.
+                        //     (This line in your code is slightly out of order,
+                        //     but the logic is correct!)
+                        if (self.graphics[idx] == 1) { // Check BEFORE flipping
+                            self.registers[0xF] = 1; // Set collision flag!
                         }
+
+                        // 11. This is the actual "draw" (or "flip").
+                        //     XOR is used, which is why sprites erase themselves
+                        //     if drawn in the same spot twice.
+                        //     1 ^ 1 = 0 (flips off)
+                        //     0 ^ 1 = 1 (flips on)
+                        self.graphics[idx] ^= 1;
                     }
                 }
             }
-
+            // 12. Done drawing, move to the next instruction.
             self.incPc();
         },
 
+        0xE => {
+            // key based skip
+            // skip if key with the value of vx is skipped
+            const x = (self.current_opcode & 0x0F00) >> 8;
+            const m = self.current_opcode & 0x00FF;
+
+            if (m == 0x9E) {
+                if (self.keys[self.registers[x]] == 1) {
+                    self.increment_pc();
+                }
+            } else if (m == 0xA1) {
+                if (self.keys[self.registers[x]] != 1) {
+                    self.increment_pc();
+                }
+            }
+            self.increment_pc();
+        },
+
+        // Misc instructions
+        0xF => {
+            const x = (self.current_opcode & 0x0F00) >> 8;
+            const m = self.current_opcode & 0x00FF;
+
+            if (m == 0x07) {
+                self.registers[x] = self.delay_timer;
+            } else if (m == 0x0A) {
+                var key_pressed = false;
+
+                var i: usize = 0;
+                while (i < 16) : (i += 1) {
+                    if (self.keys[i] != 0) {
+                        self.registers[x] = @truncate(i);
+                        key_pressed = true;
+                    }
+                }
+
+                if (!key_pressed)
+                    return;
+            } else if (m == 0x15) {
+                self.delay_timer = self.registers[x];
+            } else if (m == 0x18) {
+                self.sound_timer = self.registers[x];
+            } else if (m == 0x1E) {
+                self.registers[0xF] = if (self.index + self.registers[x] > 0xFFF) 1 else 0;
+                self.index += self.registers[x];
+            } else if (m == 0x29) {
+                self.index = self.registers[x] * 0x5;
+            } else if (m == 0x33) {
+                self.memory[self.index] = self.registers[x] / 100;
+                self.memory[self.index + 1] = (self.registers[x] / 10) % 10;
+                self.memory[self.index + 2] = self.registers[x] % 10;
+            } else if (m == 0x55) {
+                var i: usize = 0;
+                while (i <= x) : (i += 1) {
+                    self.memory[self.index + i] = self.registers[i];
+                }
+            } else if (m == 0x65) {
+                var i: usize = 0;
+                while (i <= x) : (i += 1) {
+                    self.registers[i] = self.memory[self.index + i];
+                }
+            }
+
+            self.increment_pc();
+        },
+
         else => {},
+    }
+    if (self.delay_timer > 0)
+        self.delay_timer -= 1;
+
+    if (self.sound_timer > 0) {
+        self.sound_timer -= 1;
     }
 }
 
