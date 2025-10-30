@@ -3,7 +3,36 @@ const chip8 = @import("chip8");
 const rl = @import("raylib");
 const CHIP8 = @import("emu.zig");
 
+const KEY_MAP = [_]rl.KeyboardKey{
+    .zero, // 0
+    .one, // 1
+    .two, // 2
+    .three, // 3
+    .four, // 4
+    .five, // 5
+    .six, // 6
+    .seven, // 7
+    .eight, // 8
+    .nine, // 9
+    .a, // A
+    .b, // B
+    .c, // C
+    .d, // D
+    .e, // E
+    .f, // F
+};
+
 var cpu: *CHIP8 = undefined;
+
+fn handleInput() void {
+    for (0..KEY_MAP.len) |i| {
+        if (rl.isKeyDown(KEY_MAP[i])) {
+            cpu.keys[i] = 1;
+        } else {
+            cpu.keys[i] = 0;
+        }
+    }
+}
 
 pub fn main() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
@@ -66,6 +95,7 @@ pub fn main() !void {
 
     while (!rl.windowShouldClose()) {
         cpu.cycle();
+        handleInput();
         std.debug.print("{d}\n", .{cpu.pc});
         if (cpu.rdraw) {
             for (0..pxbuffer.len) |idx| {
