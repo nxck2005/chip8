@@ -90,53 +90,66 @@ pub fn cycle(self: *Self) void {
     // THIS 0000 0000 0000
     const msn = self.opcode >> 12;
     switch (msn) {
+        // CLS and RET
         0x0 => {
+            // Two special opcodes live here.
             if (self.opcode == 0x00E0) {
-                // clrscr
+                // 00E0: CLS
+                // Clear the display.
                 for (&self.graphics) |*g| {
                     g.* = 0;
                 }
             } else if (self.opcode == 0x00EE) {
-                // ret instruction
+                // 00EE: RET
+                // Return from a subroutine.
+                // 1. Decrement the stack pointer.
                 self.sp -= 1;
+                // 2. Set the program counter to the address at the top of the stack.
                 self.pc = self.stack[self.sp];
             }
             self.incPc();
         },
 
-        // jmp
-        // just set pc to last 3 nibbles
-        // we only use 12 bits for the addr
+        // 1NNN: JP addr
+        // Jump to location NNN.
         0x1 => self.pc = self.opcode & 0x0FFF,
 
-        // call instruction
+        // 2NNN: CALL addr
+        // Call subroutine at NNN.
         0x2 => {
-            // save return address on current top of stack
+            // 1. Push the current program counter to the stack.
             self.stack[self.sp] = self.pc;
+            // 2. Increment the stack pointer.
             self.sp += 1;
+            // 3. Set the program counter to NNN.
             self.pc = self.opcode & 0x0FFF;
         },
 
+        // 3XKK: SE Vx, byte
+        // Skip next instruction if Vx = KK.
         0x3 => {
-            // skip next instruction if Vx = kk
             const x = (self.opcode & 0x0F00) >> 8;
-            if (self.registers[x] == self.opcode & 0x00FF) {
+            const kk = self.opcode & 0x00FF;
+            if (self.registers[x] == kk) {
                 self.incPc();
             }
             self.incPc();
         },
 
+        // 4XKK: SNE Vx, byte
+        // Skip next instruction if Vx != KK.
         0x4 => {
-            // skip next instruction if Vx != kk
             const x = (self.opcode & 0x0F00) >> 8;
-            if (self.registers[x] != self.opcode & 0x00FF) {
+            const kk = self.opcode & 0x00FF;
+            if (self.registers[x] != kk) {
                 self.incPc();
             }
             self.incPc();
         },
 
+        // 5XY0: SE Vx, Vy
+        // Skip next instruction if Vx = Vy.
         0x5 => {
-            // skip next instruction if Vx == Vy
             const vx = (self.opcode & 0x0F00) >> 8;
             const vy = (self.opcode & 0x00F0) >> 4;
             if (self.registers[vx] == self.registers[vy]) {
@@ -145,28 +158,22 @@ pub fn cycle(self: *Self) void {
             self.incPc();
         },
 
-        0x9 => {
-            // skip next instruction if Vx != Vy
-            const vx = (self.opcode & 0x0F00) >> 8;
-            const vy = (self.opcode & 0x00F0) >> 4;
-            if (self.registers[vx] != self.registers[vy]) {
-                self.incPc();
-            }
-            self.incPc();
-        },
-
+        // 6XKK: LD Vx, byte
+        // Set Vx = KK.
         0x6 => {
-            // load a byte
             const x = (self.opcode & 0x0F00) >> 8;
-            self.registers[x] = @truncate(self.opcode & 0x00FF);
+            const kk = self.opcode & 0x00FF;
+            self.registers[x] = @truncate(kk);
             self.incPc();
         },
 
+        // 7XKK: ADD Vx, byte
+        // Set Vx = Vx + KK.
         0x7 => {
-            // add instruction
             @setRuntimeSafety(false);
             const x = (self.opcode & 0x0F00) >> 8;
-            self.registers[x] += @truncate(self.opcode & 0x00FF);
+            const kk = self.opcode & 0x00FF;
+            self.registers[x] += @truncate(kk);
             self.incPc();
         },
 
@@ -213,25 +220,38 @@ pub fn cycle(self: *Self) void {
             self.incPc();
         },
 
-        0xA => {
+        // 9XY0: SNE Vx, Vy
+        // Skip next instruction if Vx != Vy.
+        0x9 => {
+            const vx = (self.opcode & 0x0F00) >> 8;
+            const vy = (self.opcode & 0x00F0) >> 4;
+            if (self.registers[vx] != self.registers[vy]) {
+                self.incPc();
+            }
+            self.incPc();
+        },
 
-            // load address
+        // ANNN: LD I, addr
+        // Set I = NNN.
+        0xA => {
             self.index = self.opcode & 0x0FFF;
             self.incPc();
         },
 
+        // BNNN: JP V0, addr
+        // Jump to location NNN + V0.
         0xB => {
-
-            // jump to loc nnn + reg0
             self.pc = (self.opcode & 0x0FFF) + @as(u16, @intCast(self.registers[0]));
         },
 
+        // CXKK: RND Vx, byte
+        // Set Vx = random byte AND KK.
         0xC => {
             const x = (self.opcode & 0x0F00) >> 8;
             const kk = self.opcode & 0x00FF;
             const rand_gen = std.Random.DefaultPrng;
             var rand = rand_gen.init(33);
-            self.registers[x] = @mod(rand.random().int(u8), 255) & @as(u8, @truncate(kk));
+            self.registers[x] = rand.random().int(u8) & @as(u8, @truncate(kk));
             self.incPc();
         },
 
@@ -308,79 +328,111 @@ pub fn cycle(self: *Self) void {
             self.incPc();
         },
 
+        // EX9E and EXA1: Key-based skips
         0xE => {
-            // key based skip
-            // skip if key with the value of vx is skipped
-            const x = (self.current_opcode & 0x0F00) >> 8;
-            const m = self.current_opcode & 0x00FF;
+            const x = (self.opcode & 0x0F00) >> 8;
+            const m = self.opcode & 0x00FF;
 
             if (m == 0x9E) {
+                // EX9E: SKP Vx
+                // Skip next instruction if key with the value of Vx is pressed.
                 if (self.keys[self.registers[x]] == 1) {
-                    self.increment_pc();
+                    self.incPc();
                 }
             } else if (m == 0xA1) {
+                // EXA1: SKNP Vx
+                // Skip next instruction if key with the value of Vx is not pressed.
                 if (self.keys[self.registers[x]] != 1) {
-                    self.increment_pc();
+                    self.incPc();
                 }
             }
-            self.increment_pc();
+            self.incPc();
         },
 
         // Misc instructions
         0xF => {
-            const x = (self.current_opcode & 0x0F00) >> 8;
-            const m = self.current_opcode & 0x00FF;
+            const x = (self.opcode & 0x0F00) >> 8;
+            const m = self.opcode & 0x00FF;
 
-            if (m == 0x07) {
-                self.registers[x] = self.delay_timer;
-            } else if (m == 0x0A) {
-                var key_pressed = false;
+            switch (m) {
+                // FX07: LD Vx, DT
+                // Set Vx = delay timer value.
+                0x07 => self.registers[x] = self.delayTimer,
 
-                var i: usize = 0;
-                while (i < 16) : (i += 1) {
-                    if (self.keys[i] != 0) {
-                        self.registers[x] = @truncate(i);
-                        key_pressed = true;
+                // FX0A: LD Vx, K
+                // Wait for a key press, store the value of the key in Vx.
+                0x0A => {
+                    var key_pressed = false;
+                    var i: usize = 0;
+                    while (i < 16) : (i += 1) {
+                        if (self.keys[i] != 0) {
+                            self.registers[x] = @truncate(i);
+                            key_pressed = true;
+                            break;
+                        }
                     }
-                }
+                    // If no key is pressed, we need to try this opcode again.
+                    // So, we don't increment the PC.
+                    if (!key_pressed) return;
+                },
 
-                if (!key_pressed)
-                    return;
-            } else if (m == 0x15) {
-                self.delay_timer = self.registers[x];
-            } else if (m == 0x18) {
-                self.sound_timer = self.registers[x];
-            } else if (m == 0x1E) {
-                self.registers[0xF] = if (self.index + self.registers[x] > 0xFFF) 1 else 0;
-                self.index += self.registers[x];
-            } else if (m == 0x29) {
-                self.index = self.registers[x] * 0x5;
-            } else if (m == 0x33) {
-                self.memory[self.index] = self.registers[x] / 100;
-                self.memory[self.index + 1] = (self.registers[x] / 10) % 10;
-                self.memory[self.index + 2] = self.registers[x] % 10;
-            } else if (m == 0x55) {
-                var i: usize = 0;
-                while (i <= x) : (i += 1) {
-                    self.memory[self.index + i] = self.registers[i];
-                }
-            } else if (m == 0x65) {
-                var i: usize = 0;
-                while (i <= x) : (i += 1) {
-                    self.registers[i] = self.memory[self.index + i];
-                }
+                // FX15: LD DT, Vx
+                // Set delay timer = Vx.
+                0x15 => self.delayTimer = self.registers[x],
+
+                // FX18: LD ST, Vx
+                // Set sound timer = Vx.
+                0x18 => self.soundTimer = self.registers[x],
+
+                // FX1E: ADD I, Vx
+                // Set I = I + Vx.
+                0x1E => {
+                    self.registers[0xF] = if (self.index + self.registers[x] > 0xFFF) 1 else 0;
+                    self.index += self.registers[x];
+                },
+
+                // FX29: LD F, Vx
+                // Set I = location of sprite for digit Vx.
+                0x29 => self.index = self.registers[x] * 0x5,
+
+                // FX33: LD B, Vx
+                // Store BCD representation of Vx in memory locations I, I+1, and I+2.
+                0x33 => {
+                    self.memory[self.index] = self.registers[x] / 100;
+                    self.memory[self.index + 1] = (self.registers[x] / 10) % 10;
+                    self.memory[self.index + 2] = self.registers[x] % 10;
+                },
+
+                // FX55: LD [I], Vx
+                // Store registers V0 through Vx in memory starting at location I.
+                0x55 => {
+                    var i: usize = 0;
+                    while (i <= x) : (i += 1) {
+                        self.memory[self.index + i] = self.registers[i];
+                    }
+                },
+
+                // FX65: LD Vx, [I]
+                // Read registers V0 through Vx from memory starting at location I.
+                0x65 => {
+                    var i: usize = 0;
+                    while (i <= x) : (i += 1) {
+                        self.registers[i] = self.memory[self.index + i];
+                    }
+                },
+                else => {},
             }
 
-            self.increment_pc();
+            self.incPc();
         },
 
         else => {},
     }
-    if (self.delay_timer > 0)
-        self.delay_timer -= 1;
+    if (self.delayTimer > 0)
+        self.delayTimer -= 1;
 
-    if (self.sound_timer > 0) {
-        self.sound_timer -= 1;
+    if (self.soundTimer > 0) {
+        self.soundTimer -= 1;
     }
 }
 
