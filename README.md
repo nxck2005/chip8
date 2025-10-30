@@ -6,6 +6,8 @@
 
 A simple CHIP-8 emulator written in Zig, using Raylib for graphics.
 
+![CHIP-8 Emulator Demo](demo/img1.gif)
+
 ## Features
 
 *   Implements all 35 original CHIP-8 opcodes.
