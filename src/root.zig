@@ -1,11 +1,14 @@
 const std = @import("std");
+const c = @cImport({
+    @cDefine("SDL_DISABLE_OLD_NAMES", {});
+    @cDefine("SDL_MAIN_HANDLED", {});
+    @cInclude("SDL3/SDL.h");
+    @cInclude("SDL3/SDL_main.h");
+});
+const process = std.process;
 
-pub fn main() !void {
-    var stdout_buffer: [1024]u8 = undefined;
-    var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
-    const stdout = &stdout_writer.interface;
+pub fn init() !void {}
 
-    try stdout.print("CHIP 8\n", .{});
+pub fn deinit() void {}
 
-    try stdout.flush();
-}
+pub fn main() !void {}
