@@ -13,10 +13,12 @@ pub fn main() !void {
 
     while (!rl.windowShouldClose()) {
         rl.beginDrawing();
-        defer rl.endDrawing();
 
         rl.clearBackground(rl.Color.black);
 
-        rl.drawText("Hello, world!", 190, 200, 20, rl.Color.white);
+        rl.drawText("Hello, world!", 10, 40, 20, rl.Color.white);
+        rl.drawFPS(10, 10);
+
+        rl.endDrawing();
     }
 }
