@@ -140,7 +140,7 @@ pub fn cycle(self: *Self) void {
         },
 
         0x5 => {
-            // skip next instructio if Vx == Vy
+            // skip next instruction if Vx == Vy
             var vx = (self.opcode & 0x0F00) >> 8;
             var vy = (self.opcode & 0x00F0) >> 4;
             if (self.registers[vx] == self.registers[vy]) {
@@ -150,13 +150,19 @@ pub fn cycle(self: *Self) void {
         },
 
         0x9 => {
-            // skip next instructio if Vx != Vy
+            // skip next instruction if Vx != Vy
             var vx = (self.opcode & 0x0F00) >> 8;
             var vy = (self.opcode & 0x00F0) >> 4;
             if (self.registers[vx] != self.registers[vy]) {
                 self.incPc();
             }
             self.incPc(); 
+        },
+
+        0x6 => {
+            // load a byte
+            var regno = (self.opcode & 0x0F00) >> 8;
+            self.registers[regno] = @truncate(u8, self.opcode & 0x00FF);
         }
     }
 }
