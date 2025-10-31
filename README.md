@@ -10,11 +10,11 @@ A simple CHIP-8 emulator/interpreter written in Zig, using Raylib for graphics.
 
 ## Features
 
-*   Implements all 35 original CHIP-8 opcodes.
-*   Supports CHIP-8 ROMs.
-*   Basic graphics and input handling.
+*   All 35 instructions.
+*   Supports running of CHIP-8 & ETI-660 ROMS.
+*   Supports the 16-key hex keyboard.
 
-## Building and Running
+## Build
 
 ### Dependencies
 
@@ -41,10 +41,6 @@ A simple CHIP-8 emulator/interpreter written in Zig, using Raylib for graphics.
     ```bash
     zig build run -- roms/Breakout.ch8
     ```
-
-## Usage
-
-To run a CHIP-8 ROM, provide the path to the ROM file as a command-line argument to the emulator.
 
 ## Controls
 
