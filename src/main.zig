@@ -113,7 +113,8 @@ pub fn main() !void {
         rl.clearBackground(rl.Color.black);
         rl.drawTexturePro(texture, rl.Rectangle{ .x = 0, .y = 0, .width = 64, .height = 32 }, rl.Rectangle{ .x = 0, .y = 0, .width = screenWidth, .height = screenHeight }, rl.Vector2{ .x = 0, .y = 0 }, 0.0, rl.Color.white);
 
-        rl.drawFPS(10, 10);
+        // For debugging
+        // rl.drawFPS(10, 10);
 
         rl.endDrawing();
     }
