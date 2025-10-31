@@ -24,7 +24,7 @@ A simple CHIP-8 emulator/interpreter written in Zig, using Raylib for graphics.
 
 1.  **Clone the repository:**
     ```bash
-    git clone https://github.com/your-username/chip8.git
+    git clone https://github.com/nxck2005/chip8.git
     cd chip8
     ```
 
