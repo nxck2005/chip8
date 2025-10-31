@@ -96,7 +96,9 @@ pub fn main() !void {
     while (!rl.windowShouldClose()) {
         cpu.cycle();
         handleInput();
-        std.debug.print("{d}\n", .{cpu.pc});
+
+        // For debugging
+        // std.debug.print("DEBUG: Current program counter: {d}\n", .{cpu.pc});
         if (cpu.rdraw) {
             for (0..pxbuffer.len) |idx| {
                 if (cpu.graphics[idx] == 1) {
