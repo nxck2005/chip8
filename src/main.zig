@@ -102,7 +102,7 @@ pub fn main() !void {
         if (cpu.rdraw) {
             for (0..pxbuffer.len) |idx| {
                 if (cpu.graphics[idx] == 1) {
-                    pxbuffer[idx] = rl.Color.white;
+                    pxbuffer[idx] = rl.Color.lime;
                 } else {
                     pxbuffer[idx] = rl.Color.black;
                 }
