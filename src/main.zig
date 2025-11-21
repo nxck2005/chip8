@@ -97,7 +97,7 @@ pub fn main() !void {
         cpu.cycle();
         handleInput();
 
-        // For debugging
+        // debug
         // std.debug.print("DEBUG: Current program counter: {d}\n", .{cpu.pc});
         if (cpu.rdraw) {
             for (0..pxbuffer.len) |idx| {
